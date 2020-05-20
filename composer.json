@@ -1,0 +1,30 @@
+{
+    "name": "paulxu-cn/yield-thread",
+    "description": "A Java thread-like coroutine scheduler implemented with PHP",
+    "keywords": ["yield", "coroutine", "thread", "yield thread"],
+    "license": "MIT",
+    "version": "0.0.1",
+    "type": "library",
+    "authors": [
+        {
+            "name": "PaulXu-cn",
+            "email": "dianzikdcdmain@163.com"
+        }
+    ],
+    "require": {
+        "php": ">=5.5"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^6.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "YieldThread\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "YieldThread\\": "tests"
+        }
+    }
+}
