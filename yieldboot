@@ -1,6 +1,14 @@
 #!/usr/bin/env php
 <?php
 
+foreach (array(__DIR__ . '/../../autoload.php', __DIR__ . '/../vendor/autoload.php', __DIR__ . '/vendor/autoload.php') as $file) {
+    if (file_exists($file)) {
+        define('PHPUNIT_COMPOSER_INSTALL', $file);
+
+        break;
+    }
+}
+
 $path = realpath($argv[1]);
 
 require_once $path;
@@ -9,6 +17,6 @@ $info = pathinfo($argv[1]);
 
 $mainGen = ($info['filename'])::main($argc, $argv);
 
-YieldThreadScheduler::setMainThread($mainGen);
+\LikeThread\YieldThreadScheduler::setMainThread($mainGen);
 
-YieldThreadScheduler::threadLoop();
+\LikeThread\YieldThreadScheduler::threadLoop();

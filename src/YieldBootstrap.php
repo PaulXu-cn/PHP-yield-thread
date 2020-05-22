@@ -1,4 +1,10 @@
 <?php
+/**
+ * Yield Thread Bootstrap
+ *
+ * @author Paul Xu
+ */
+namespace LikeThread;
 
 $path = realpath($argv[1]);
 

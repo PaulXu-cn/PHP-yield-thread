@@ -1,12 +1,16 @@
 <?php
 
+namespace LikeThread;
+
 /**
  * Class MainYieldTread
+ *
+ * @author Paul Xu
  */
 class MainYieldTread extends YieldThread
 {
     /**
-     * @var Generator   $mainGen
+     * @var \Generator   $mainGen
      */
     protected $mainGen;
 
@@ -32,7 +36,7 @@ class MainYieldTread extends YieldThread
     {
         $this->gen = $this->mainGen;
 
-        if ($this->gen instanceof Generator) {
+        if ($this->gen instanceof \Generator) {
             $this->state = self::STATE_RUNNING;
             $this->started = true;
             return $this->gen->current();

@@ -19,12 +19,16 @@
     },
     "autoload": {
         "psr-4": {
-            "YieldThread\\": "src/"
-        }
+            "LikeThread\\": "src/"
+        },
+        "files": ["src/functions.php"]
     },
     "autoload-dev": {
         "psr-4": {
-            "YieldThread\\": "tests"
+            "LikeThread\\": "tests"
         }
-    }
+    },
+    "bin": [
+        "yieldboot"
+    ]
 }

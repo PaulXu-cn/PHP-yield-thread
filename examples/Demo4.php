@@ -1,18 +1,22 @@
 <?php
 
-require_once __DIR__ . '/YieldThread.php';
+require_once __DIR__ . '/../../vendor/autoload.php';
+require_once __DIR__ . '/../src/functions.php';
 
 define('DEBUG_YIELD', 1);
 
 use LikeThread\YieldThread;
+use LikeThread\YieldChannel;
 
-class Task extends YieldThread
+class Task extends LikeThread\YieldThread
 {
     protected $max = 1;
+    protected $chan;
 
-    public function __construct($max = 1)
+    public function __construct($max = 1, YieldChannel $channel)
     {
         $this->max = $max;
+        $this->chan = $channel;
         parent::__construct();
     }
 
@@ -25,35 +29,41 @@ class Task extends YieldThread
         foreach ($arr as $key => $value) {
             echo 'Thread Id: ' . $this->getId() . ', run Task loop: ' . $key . PHP_EOL;
             (yield $value);
+            if (5 == $key) {
+
+                echo 'Thread Id: ' . $this->getId() . ', call put data: '  . PHP_EOL;
+                yield $this->chan->put('the thread id: ' . $this->getId() . ', hello!');
+            }
         }
 
         return '0';
     }
 }
 
-
 class Task2 extends YieldThread
 {
     protected $max = 1;
-    protected $t = null;
+    protected $chan = null;
 
-    public function __construct($max = 1, YieldThread   $t)
+    public function __construct($max = 1, YieldChannel $channel)
     {
         $this->max = $max;
-        $this->t = $t;
+        $this->chan = $channel;
         parent::__construct();
     }
 
     /**
-     * @return Generator|int
+     * @return Generator|int|mixed
+     * @throws Exception
      */
     public function run()
     {
         $arr = range(0, intval($this->max));
         foreach ($arr as $key => $value) {
             if (2 == $key) {
-                echo 'Thread Id: ' . $this->getId() . ', call this->t->join ' . PHP_EOL;
-                (yield $this->t->join());
+                echo 'Thread Id: ' . $this->getId() . ', call this->outChan ' . PHP_EOL;
+                $data = (yield $this->chan->pull($this->chan));
+                echo 'get Channel data ' . $data . PHP_EOL;
             }
             echo 'Thread Id: ' . $this->getId() . ', run Task loop: ' . $key . PHP_EOL;
             (yield $value);
@@ -63,7 +73,7 @@ class Task2 extends YieldThread
     }
 }
 
-class YieldSchedulerDemo3
+class Demo4
 {
     /**
      * @param integer $argc
@@ -74,24 +84,21 @@ class YieldSchedulerDemo3
     public static function main($argc, $argv)
     {
 
-        $t = new \Task(7);
-        $t2 = new \Task(2);
-        $t3 = new \Task2(5, $t);
-        $t4 = new \Task(6);
-        echo 'start task 1' . PHP_EOL;
-        $t->start();
+        $chan1 = \LikeThread\makeChan('chan1');
+
+        $t2 = new \Task(7, $chan1);
+        $t3 = new \Task2(5, $chan1);
+
         echo 'start task 2' . PHP_EOL;
-        $t3->start();
+        $t2->start();
         echo 'start task 3' . PHP_EOL;
-        yield $t2->start();
-        echo 'start task 4' . PHP_EOL;
-        yield $t4->start();
+        $t3->start();
         echo 'wait task 3' . PHP_EOL;
-        yield YieldThread::wait($t);
-        yield YieldThread::wait($t4);
+        yield YieldThread::wait($t2);
+        yield YieldThread::wait($t3);
         yield;
 
-        echo 'main run finished, task 1 return: ' . $t->getReturn() . PHP_EOL;
+        echo 'main run finished, task 2 return: ' . $t2->getReturn() . PHP_EOL;
         return 0;
     }
 

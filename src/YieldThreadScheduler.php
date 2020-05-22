@@ -1,28 +1,17 @@
 <?php
 
-require_once __DIR__ . '/YieldThread.php';
-require_once __DIR__ . '/MainYieldTread.php';
-require_once __DIR__ . '/InterruptedException.php';
+namespace LikeThread;
 
-if (!function_exists('array_key_last')) {
-    function array_key_last($arr) {
-        return key(array_reverse($arr));
-    }
-} else {
-    // your PHP version > 7.3.0
-}
-
-if (!function_exists('micro_time')) {
-    function micro_time()
-    {
-        list($usec, $sec) = explode(" ", microtime());
-        return ((float)$usec + (float)$sec);
-    }
-}
-
+use LikeThread\ChannelRegistry;
+use LikeThread\MainYieldTread;
+use LikeThread\YieldThread;
+use LikeThread\InterruptedException;
+use LikeThread\YieldChannel;
 
 /**
  * Class YieldThreadScheduler
+ *
+ * @author Paul Xu
  */
 final Class YieldThreadScheduler extends YieldThread
 {
@@ -84,9 +73,20 @@ final Class YieldThreadScheduler extends YieldThread
      */
     static private $sleepRequests = array();
 
+    /**
+     * 注册在线的管道
+     *
+     * @var array $channels
+     */
+    static private $channels = array();
+
     static private $putChannels = array();
 
+    static private $readyChannels = array();
+
     static private $waitChannels = array();
+
+
 
     /**
      * @return null|YieldThread
@@ -152,11 +152,11 @@ final Class YieldThreadScheduler extends YieldThread
     }
 
     /**
-     * @param mixed|Generator $func
+     * @param mixed|\Generator $func
      */
     static public function setMainThread($func)
     {
-        if ($func instanceof Generator) {
+        if ($func instanceof \Generator) {
             $key = count(self::$tasks);
             self::$tasks[] = new MainYieldTread($func, $key);
         } else {
@@ -192,7 +192,7 @@ final Class YieldThreadScheduler extends YieldThread
      * @param YieldThread $thread
      *
      * @return null
-     * @throws Exception
+     * @throws \Exception
      */
     static protected function waitFor($thread)
     {
@@ -298,6 +298,7 @@ final Class YieldThreadScheduler extends YieldThread
 //                $filtered = $filtered || true;
 //            }
 
+            // 休眠中的线程过滤
             if (!$filtered && isset(self::$sleepRequests[$key])) {
                 $sleepInfo = self::$sleepRequests[$key];
                 if ($sleepInfo['sleep'] > $sleepInfo['slept']) {
@@ -308,8 +309,22 @@ final Class YieldThreadScheduler extends YieldThread
                 // 没有休眠
             }
 
+            // 等待其他线程结束
             if (!$filtered && isset(self::$dependencyTree[$key])) {
                 if (!empty(self::$dependencyTree[$key])) {
+                    $filtered = $filtered || true;
+                }
+            }
+
+            // 判断该线程是否等待 管道数据
+            if (!$filtered && isset(self::$waitChannels[$key])) {
+
+                $waitChannelName = self::$waitChannels[$key];
+                // 判断管道数据是否就绪
+                if (in_array($waitChannelName, self::$readyChannels)) {
+                    // 就绪了run
+                } else {
+                    // 没就绪就继续等
                     $filtered = $filtered || true;
                 }
             }
@@ -350,6 +365,73 @@ final Class YieldThreadScheduler extends YieldThread
     }
 
     /**
+     * @param string    $channelName
+     *
+     * @return YieldChannel
+     * @throws \Exception
+     */
+    static public function registerChannel($channelName)
+    {
+        return ChannelRegistry::register($channelName);
+    }
+
+    /**
+     * @param $channelName
+     */
+    static public function unregisterChannel($channelName)
+    {
+        ChannelRegistry::unregister($channelName);
+    }
+
+    /**
+     * @param string    $channelName
+     * @param mixed     $data
+     *
+     * @throws \Exception
+     */
+    static public function putChannel($channelName, $data)
+    {
+        $chan = ChannelRegistry::get($channelName);
+        $chan->in($data);
+        self::$readyChannels[$channelName] = $channelName;
+    }
+
+    /**
+     * @param string        $channelName
+     * @param null|integer  $len
+     *
+     * @throws \Exception
+     */
+    static public function pullChannel($channelName, $len = null)
+    {
+        $chan = ChannelRegistry::get($channelName);
+        $cId = self::$currentThreadId;
+        // 该线程在等待这个管道, 当前支持等待一个
+        self::$waitChannels[$cId] = $channelName;
+        self::$currentThread->setState(YieldThread::STATE_WAIT_CHAN);
+//        return $chan->out($len);
+    }
+
+    /**
+     * @param string        $channelName
+     * @param null|integer  $len
+     *
+     * @return array|mixed
+     * @throws \Exception
+     */
+    static private function getChannelData($channelName, $len = null)
+    {
+        $chan = ChannelRegistry::get($channelName);
+        return $chan->out($len);
+    }
+
+    static private function consumeChan($channelName)
+    {
+    }
+
+//    static public function
+
+    /**
      * 线程调度方法
      */
     static public function threadLoop()
@@ -358,7 +440,7 @@ final Class YieldThreadScheduler extends YieldThread
 
         $keepRun = true;
         /**
-         * @var \YieldThread    $task
+         * @var YieldThread    $task
          */
         $task = null;
         while($keepRun) {
@@ -375,7 +457,7 @@ final Class YieldThreadScheduler extends YieldThread
                 $randomKey = rand(0, count(self::$schedule) - 1);
                 self::$currentThreadId = self::$schedule[$randomKey];
                 /**
-                 * @var \YieldThread $task
+                 * @var YieldThread $task
                  */
                 $task = self::$tasks[self::$currentThreadId];
                 self::$currentThread = $task;
@@ -384,24 +466,38 @@ final Class YieldThreadScheduler extends YieldThread
                 $result = null;
                 // 根据状态来判断如何运行
                 switch ($state) {
-                    case \YieldThread::STATE_NEW:
+                    case YieldThread::STATE_NEW:
                         break;
-                    case \YieldThread::STATE_READY:
+                    case YieldThread::STATE_READY:
                         $result = $task->start();
 //                        $result = $task->sendValue(null);
                         break;
-                    case \YieldThread::STATE_BLOCKED:
+                    case YieldThread::STATE_BLOCKED:
                         $params = array();
                         $result = $task->sendValue($params);
                         break;
-                    case \YieldThread::STATE_RUNNING:
+                    case YieldThread::STATE_RUNNING:
                         $params = array();
                         $result = $task->sendValue($params);
                         break;
-                    case \YieldThread::STATE_INTERRUPTED:
+                    case YieldThread::STATE_INTERRUPTED:
                         $ex = new InterruptedException('主动中断了线程 ID: ' . self::$currentThreadId .'.');
                         $result = $task->sendException($ex);
                         $task->isInterrupted(true);
+                        break;
+                    case YieldThread::STATE_WAIT_CHAN:
+                        // 判断是否在等待管道数据
+                        if (isset(self::$waitChannels[self::$currentThreadId])) {
+                            $waitChannelName = self::$waitChannels[self::$currentThreadId];
+                            // 判断管道数据是否就绪
+                            if (in_array($waitChannelName, self::$readyChannels)) {
+                                unset(self::$waitChannels[self::$currentThreadId]);
+                                unset(self::$readyChannels[$waitChannelName]);
+                                $task->setState(YieldThread::STATE_RUNNING);
+                                $task->sendValue(self::getChannelData($waitChannelName));
+                                break;
+                            }
+                        }
                         break;
                     case \YieldThread::STATE_DEAD:
                         break;

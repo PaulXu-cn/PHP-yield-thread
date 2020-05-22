@@ -1,10 +1,16 @@
 <?php
 
-require_once __DIR__ . '/YieldThreadScheduler.php';
-require_once __DIR__ . '/InterruptedException.php';
+namespace LikeThread;
+
+use LikeThread\YieldThreadScheduler;
+use LikeThread\InterruptedException;
+use LikeThread\ChannelRegistry;
+use LikeThread\YieldChannel;
 
 /**
  * Class YieldThread
+ *
+ * @author Paul Xu
  */
 abstract class YieldThread {
 
@@ -23,8 +29,11 @@ abstract class YieldThread {
     // 中断
     CONST STATE_INTERRUPTED = 4;
 
+    // 等待管道数据就绪
+    CONST STATE_WAIT_CHAN = 5;
+
     // 结束，死亡
-    CONST STATE_DEAD = 5;
+    CONST STATE_DEAD = 6;
 
     //  线程可以具有的最高优先级。
     CONST MAX_PRIORITY = 4;
@@ -36,7 +45,7 @@ abstract class YieldThread {
     CONST NORM_PRIORITY = 2;
 
     /**
-     * @var Generator   $gen
+     * @var \Generator   $gen
      */
     protected $gen;
 
@@ -119,13 +128,13 @@ abstract class YieldThread {
     abstract public function run();
 
     /**
-     * @return Generator|mixed
+     * @return \Generator|mixed
      */
     public function start()
     {
         $this->gen = static::run();
 
-        if ($this->gen instanceof Generator) {
+        if ($this->gen instanceof \Generator) {
             $this->state = self::STATE_RUNNING;
             $this->started = true;
             return $this->gen->current();
@@ -188,7 +197,7 @@ abstract class YieldThread {
 
     /**
      * @return null
-     * @throws Exception
+     * @throws \Exception
      */
     public function join()
     {
@@ -200,7 +209,7 @@ abstract class YieldThread {
      */
     public function isFinish()
     {
-        if ($this->gen instanceof Generator) {
+        if ($this->gen instanceof \Generator) {
             try {
                 $this->getReturn();
                 return true;
@@ -320,6 +329,8 @@ abstract class YieldThread {
         return $this->interrupt;
     }
 
+
+
     public function isDaemon()
     {
         return boolval($this->daemon);
@@ -327,7 +338,7 @@ abstract class YieldThread {
 
     /**
      * @param $is
-     * @throws Exception
+     * @throws \Exception
      */
     public function setDaemon($is)
     {
@@ -366,7 +377,7 @@ abstract class YieldThread {
     /**
      * @param YieldThread   $thread
      * @return  bool
-     * @throws Exception
+     * @throws \Exception
      */
     static public function wait($thread)
     {
@@ -407,11 +418,39 @@ abstract class YieldThread {
     /**
      * 当且仅当当前线程在指定的对象上保持监视器锁时，才返回 true。
      *
-     * @param stdClass  $obj
+     * @param \stdClass  $obj
      */
-    static public function holdsLock(stdClass   $obj)
+    static public function holdsLock(\stdClass   $obj)
     {
 
+    }
+
+
+
+
+
+    /**
+     * @param YieldChannel  $channel
+     * @param mixed         $data
+     *
+     * @throws \Exception
+     */
+    public function inChan($channel, $data)
+    {
+        YieldThreadScheduler::putChannel($channel->getName(), $data);
+    }
+
+    /**
+     * @param YieldChannel $channel
+     * @param null|mixed   $len
+     *
+     * @throws \Exception
+     * @return array|mixed
+     */
+    public function outChan($channel, $len = null)
+    {
+        $this->state = self::STATE_WAIT_CHAN;
+        return YieldThreadScheduler::pullChannel($channel->getName(), $len);
     }
 
 }

@@ -4,6 +4,7 @@ require_once __DIR__ . '/YieldThread.php';
 
 define('DEBUG_YIELD', 1);
 
+use LikeThread\YieldThread;
 
 class Task extends YieldThread
 {
